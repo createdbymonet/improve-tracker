@@ -32,7 +32,7 @@ Data belongs to the current browser and site origin. Clearing site data removes 
 - Vite for development and production builds
 - Prettier for formatting
 
-The project uses SvelteKit's `adapter-auto`. Choose a deployment-specific adapter when the hosting target is decided.
+Production builds use `@sveltejs/adapter-cloudflare` and Wrangler to target Cloudflare Workers. See Cloudflare's [SvelteKit guide](https://developers.cloudflare.com/workers/framework-guides/web-apps/sveltekit/) for platform documentation.
 
 ## Local development
 
@@ -61,6 +61,42 @@ Run the vocabulary data and stored-JSON regression tests with Node's built-in te
 ```sh
 node --test tests/vocabulary.test.mjs
 ```
+
+## Production deployment
+
+The production Cloudflare Worker is named `improve-tracker`. Development stays local with `pnpm dev`; there is no hosted development Worker or development deployment command.
+
+| Branch    | Purpose     | Cloudflare deployment                      |
+| --------- | ----------- | ------------------------------------------ |
+| `main`    | Development | Does not trigger the deployment workflow   |
+| `release` | Production  | Pushes deploy the `improve-tracker` Worker |
+
+Add these **repository Actions secrets** in GitHub under **Settings → Secrets and variables → Actions**:
+
+| Secret                  | Value                                                                                              |
+| ----------------------- | -------------------------------------------------------------------------------------------------- |
+| `CLOUDFLARE_API_TOKEN`  | API token with **Workers Scripts: Edit**, restricted to the intended production Cloudflare account |
+| `CLOUDFLARE_ACCOUNT_ID` | The account ID for that production Cloudflare account                                              |
+
+After the secrets are configured, push reviewed changes to `release`. The GitHub Actions workflow uses Node.js 24 and the pinned pnpm version, installs with `--frozen-lockfile`, checks formatting and types, runs the vocabulary tests, builds, validates a Wrangler dry run, and then deploys production. It does not run a deployment for pushes to `main` or other branches.
+
+Check the Worker's Cloudflare dashboard for a separate **Workers Builds** Git integration. Disconnect any integration that deploys from `main`; the GitHub Actions branch filter cannot disable dashboard-managed deployment triggers. Existing dashboard integrations must be checked separately from this repository configuration.
+
+To validate the production bundle locally without publishing:
+
+```sh
+pnpm build
+pnpm deploy:dry-run
+```
+
+For an intentional manual production deployment, check out the reviewed `release` revision and authenticate Wrangler with `pnpm exec wrangler login`, or supply the same Cloudflare credentials as environment variables. Then run:
+
+```sh
+pnpm build
+pnpm deploy:production
+```
+
+Both deployment scripts use `wrangler.jsonc` and require a successful build first. Generated `.svelte-kit/` and `.wrangler/` files are ignored by Git. See Cloudflare's [GitHub Actions guide](https://developers.cloudflare.com/workers/ci-cd/external-cicd/github-actions/) for authentication and CI details.
 
 ## Project structure
 

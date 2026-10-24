@@ -1,0 +1,56 @@
+name: Deploy production
+
+on:
+  push:
+    branches:
+      - release
+
+permissions:
+  contents: read
+
+concurrency:
+  group: improve-tracker-production
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Validate and deploy improve-tracker
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Set up Node.js
+        uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: '24'
+
+      - name: Set up pnpm
+        uses: pnpm/action-setup@v6
+        with:
+          cache: true
+
+      - name: Install locked dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Check formatting
+        run: pnpm format:check
+
+      - name: Check Svelte and TypeScript
+        run: pnpm check
+
+      - name: Test vocabulary data
+        run: node --test tests/vocabulary.test.mjs
+
+      - name: Build production application
+        run: pnpm build
+
+      - name: Validate Worker bundle without deploying
+        run: pnpm deploy:dry-run
+
+      - name: Deploy production Worker
+        run: pnpm deploy:production
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
