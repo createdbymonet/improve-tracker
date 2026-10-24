@@ -1,273 +1,305 @@
 <script lang="ts">
-	import brandMark from '../lib/assets/favicon.svg';
+	import { onMount, tick } from 'svelte';
+	import VocabularyCard from '../lib/components/VocabularyCard.svelte';
+	import VocabularyForm from '../lib/components/VocabularyForm.svelte';
+	import {
+		createSampleVocabulary,
+		parseStoredVocabulary,
+		STORAGE_KEY
+	} from '../lib/data/vocabulary';
+	import type { VocabularyDraft, VocabularyItem } from '../lib/types/vocabulary';
+
+	interface Editor {
+		id: string | null;
+		values?: VocabularyDraft;
+	}
+
+	let vocabulary = $state<VocabularyItem[]>([]);
+	let ready = $state(false);
+	let editor = $state<Editor | null>(null);
+	let storageNotice = $state('');
+	let announcement = $state('');
+	let addWordButton: HTMLButtonElement;
+	let returnFocusTo: HTMLButtonElement | undefined;
+
+	onMount(() => {
+		try {
+			vocabulary = parseStoredVocabulary(window.localStorage.getItem(STORAGE_KEY));
+		} catch {
+			vocabulary = createSampleVocabulary();
+			storageNotice =
+				'We couldn’t open your saved notebook. Starter words are shown. Browser saving may be unavailable.';
+		}
+		ready = true;
+	});
+
+	function persist(next: VocabularyItem[]) {
+		vocabulary = next;
+		try {
+			window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
+			storageNotice = '';
+		} catch {
+			storageNotice =
+				'Your changes are kept in this tab, but couldn’t be saved. They may be lost when you refresh.';
+		}
+	}
+
+	function openAdd(trigger: HTMLButtonElement) {
+		if (editor?.id === null) {
+			document.getElementById('vocabulary-word')?.focus();
+			return;
+		}
+		returnFocusTo = trigger;
+		editor = { id: null };
+	}
+
+	function openEdit(item: VocabularyItem, trigger: HTMLButtonElement) {
+		const { id, ...values } = item;
+		returnFocusTo = trigger;
+		editor = { id, values };
+	}
+
+	async function closeEditor() {
+		editor = null;
+		await tick();
+		if (returnFocusTo?.isConnected) returnFocusTo.focus();
+		else addWordButton.focus();
+		returnFocusTo = undefined;
+	}
+
+	async function saveWord(values: VocabularyDraft) {
+		if (!editor) return;
+		const editingId = editor.id;
+		const item: VocabularyItem = {
+			id: editingId ?? crypto.randomUUID(),
+			...values
+		};
+
+		persist(
+			editingId
+				? vocabulary.map((existing) => (existing.id === editingId ? item : existing))
+				: [...vocabulary, item]
+		);
+		editor = null;
+		returnFocusTo = undefined;
+		announcement = (editingId ? 'Updated ' : 'Added ') + item.word + '.';
+		await tick();
+		document.getElementById('word-' + item.id)?.focus();
+	}
+
+	async function deleteWord(item: VocabularyItem) {
+		const index = vocabulary.findIndex((existing) => existing.id === item.id);
+		const next = vocabulary.filter((existing) => existing.id !== item.id);
+		const nextFocus = next[index] ?? next[index - 1];
+		if (editor?.id === item.id) {
+			editor = null;
+			returnFocusTo = undefined;
+		}
+		persist(next);
+		announcement = 'Deleted ' + item.word + '.';
+		await tick();
+		if (nextFocus) document.getElementById('word-' + nextFocus.id)?.focus();
+		else addWordButton.focus();
+	}
 </script>
 
 <svelte:head>
-	<title>Improve Tracker — Coming Soon</title>
+	<title>Improve Tracker — Your English Notebook</title>
 	<meta
 		name="description"
-		content="Small steps. Consistent progress. Improve Tracker is a study habit tracker in the making, designed to help you build learning routines and track daily progress."
+		content="Build your English, one word at a time. Keep vocabulary, examples, Japanese meanings, translations, and notes in your own English notebook."
 	/>
 </svelte:head>
 
-<div class="page">
-	<header class="site-header">
-		<div class="brand">
-			<img src={brandMark} alt="" width="40" height="40" />
-			<span>Improve Tracker</span>
-		</div>
-		<span class="header-note">A little better, every day.</span>
+<div class="notebook">
+	<header class="notebook-header">
+		<p class="eyebrow">Daily English Notebook</p>
+		<h1>Improve Tracker</h1>
+		<p class="subtitle">Build your English, one word at a time.</p>
 	</header>
 
-	<main>
-		<section class="hero" aria-labelledby="hero-title">
-			<div class="hero__content">
-				<p class="status"><span aria-hidden="true"></span> Coming Soon</p>
-				<h1 id="hero-title">
-					Small steps.<br />
-					Consistent <em>progress.</em>
-				</h1>
-				<p class="hero__description">
-					A simpler way to build study habits and see your daily learning add up. A little focus
-					today, a little more confidence tomorrow.
-				</p>
-				<p class="hero__footnote">Your next chapter of learning starts here.</p>
-			</div>
+	<div class="add-word-action">
+		<button
+			bind:this={addWordButton}
+			class="button button--primary add-word-button"
+			type="button"
+			disabled={!ready}
+			aria-expanded={editor !== null}
+			aria-controls={editor ? 'vocabulary-editor' : undefined}
+			onclick={(event) => openAdd(event.currentTarget)}
+		>
+			<span class="plus" aria-hidden="true">+</span> Add Word
+		</button>
+		{#if storageNotice}
+			<p class="storage-notice" role="status">{storageNotice}</p>
+		{/if}
+	</div>
 
-			<div class="growth-art" aria-hidden="true">
-				<svg viewBox="0 0 460 460" fill="none">
-					<circle cx="230" cy="230" r="200" fill="#EBEFE3" />
-					<circle cx="338" cy="106" r="29" fill="#D8DFB5" />
-					<path d="M63 366h334" stroke="#CDD6C7" stroke-linecap="round" stroke-width="2" />
-					<rect x="85" y="296" width="78" height="70" rx="10" fill="#D3DDC7" />
-					<path d="M163 252a10 10 0 0 1 10-10h68v124h-78V252Z" fill="#B0C4A3" />
-					<path d="M241 198a10 10 0 0 1 10-10h68v178h-78V198Z" fill="#769B77" />
-					<path
-						d="M319 144a10 10 0 0 1 10-10h58a10 10 0 0 1 10 10v212a10 10 0 0 1-10 10h-68V144Z"
-						fill="#35654D"
+	<main class="notebook-content" aria-busy={!ready} aria-label="Vocabulary notebook">
+		{#if editor}
+			{#key editor}
+				<div id="vocabulary-editor" class="editor">
+					<VocabularyForm
+						initialValues={editor.values}
+						editing={editor.id !== null}
+						onSave={saveWord}
+						onCancel={closeEditor}
 					/>
-					<path d="M166 187c0-29-20-48-47-49 0 27 17 48 47 49Z" fill="#9AAF83" />
-					<path d="M166 166c0-29 18-48 43-50 0 26-15 47-43 50Z" fill="#35654D" />
-					<path d="M166 214v-58" stroke="#35654D" stroke-linecap="round" stroke-width="3" />
-					<circle cx="85" cy="240" r="4" fill="#9AAF83" />
-					<circle cx="269" cy="102" r="3" fill="#9AAF83" />
-					<circle cx="411" cy="225" r="4" fill="#9AAF83" />
-				</svg>
-				<p>Room to grow.</p>
-			</div>
-		</section>
+				</div>
+			{/key}
+		{/if}
+
+		{#if !ready}
+			<p class="loading" role="status">Opening your notebook…</p>
+		{:else if vocabulary.length === 0}
+			<section class="empty-state" aria-labelledby="empty-title">
+				<div class="empty-mark" aria-hidden="true">Aa</div>
+				<h2 id="empty-title">Your next word starts here.</h2>
+				<p>Add a word, write what it means, and make it yours.</p>
+				<button
+					class="button button--primary"
+					type="button"
+					onclick={(event) => openAdd(event.currentTarget)}
+				>
+					<span aria-hidden="true">+</span> Add your first word
+				</button>
+			</section>
+		{:else}
+			<ol class="vocabulary-list" aria-label="Saved words">
+				{#each vocabulary as item, index (item.id)}
+					<li>
+						<VocabularyCard {item} {index} onEdit={openEdit} onDelete={deleteWord} />
+					</li>
+				{/each}
+			</ol>
+		{/if}
 	</main>
 
-	<footer class="site-footer">
-		<p>Built around learning. Made for your own pace.</p>
-		<p class="footer-note">
-			<span aria-hidden="true">↗</span> Better habits begin with a small step.
-		</p>
-	</footer>
+	<p class="sr-only" role="status">{announcement}</p>
 </div>
 
 <style lang="scss">
-	.page {
-		display: flex;
-		min-height: 100svh;
-		max-width: 1440px;
-		flex-direction: column;
+	.notebook {
+		width: 100%;
+		max-width: 45rem;
 		margin-inline: auto;
-		padding-inline: clamp(1.5rem, 5vw, 4.5rem);
+		padding-bottom: env(safe-area-inset-bottom, 0px);
 	}
 
-	.site-header {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 2rem;
-		padding-block: 2.5rem;
-	}
+	.notebook-header {
+		padding: 2.75rem 1.5rem 1.125rem;
 
-	.brand {
-		display: flex;
-		align-items: center;
-		gap: 0.8rem;
-		font-size: 1.1rem;
-		font-weight: 650;
-		letter-spacing: -0.035em;
-
-		img {
-			flex-shrink: 0;
+		h1 {
+			margin-top: 0.375rem;
+			font-size: 1.875rem;
+			font-weight: 700;
+			letter-spacing: -0.035em;
+			line-height: 1.2;
+			overflow-wrap: anywhere;
 		}
 	}
 
-	.header-note {
+	.eyebrow {
+		color: #6250d5;
+		font-size: 0.75rem;
+		font-weight: 600;
+		line-height: 1.25;
+		text-transform: uppercase;
+	}
+
+	.subtitle {
+		margin-top: 0.375rem;
+		color: var(--color-muted);
+		font-size: 0.9375rem;
+		line-height: 1.2;
+	}
+
+	.add-word-action {
+		padding: 0.25rem 1.5rem 1.125rem;
+		background: var(--color-surface);
+	}
+
+	.add-word-button {
+		width: 100%;
+		min-height: 3.125rem;
+		justify-content: flex-start;
+	}
+
+	.plus {
+		font-size: 1.25rem;
+		font-weight: 700;
+		line-height: 1;
+	}
+
+	.storage-notice {
+		margin-top: 0.875rem;
 		color: var(--color-muted);
 		font-size: 0.8125rem;
+		line-height: 1.6;
+		overflow-wrap: anywhere;
 	}
 
-	main {
-		display: grid;
-		flex: 1;
-		align-items: center;
-		padding-block: 3.5rem 5rem;
+	.notebook-content {
+		min-width: 0;
+		padding: 0 1.5rem 2.5rem;
 	}
 
-	.hero {
-		display: grid;
-		grid-template-columns: minmax(0, 1.5fr) minmax(0, 1fr);
-		align-items: center;
-		gap: 2rem;
+	.editor {
+		margin-bottom: 1rem;
+		scroll-margin-block: 1rem;
+	}
 
-		&__content {
-			padding-bottom: 1rem;
+	.vocabulary-list {
+		display: flex;
+		flex-direction: column;
+		gap: 1rem;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+
+		li {
+			min-width: 0;
+		}
+	}
+
+	.loading {
+		padding-block: 2.5rem;
+		color: var(--color-muted);
+		font-size: 0.875rem;
+		text-align: center;
+	}
+
+	.empty-state {
+		padding: 2.5rem 1.5rem;
+		border: 1px dashed #c9c1f5;
+		border-radius: 1.375rem;
+		background: var(--color-surface);
+		text-align: center;
+
+		h2 {
+			margin-block: 1rem 0.625rem;
+			font-size: 1.375rem;
+			letter-spacing: -0.025em;
+			line-height: 1.3;
 		}
 
-		&__description {
-			max-width: 29rem;
-			margin-top: 1.75rem;
+		p {
+			margin-bottom: 1.5rem;
 			color: var(--color-muted);
-			font-size: 1.0625rem;
-			line-height: 1.8;
-			text-wrap: pretty;
-		}
-
-		&__footnote {
-			margin-top: 2.5rem;
-			padding-left: 0.9rem;
-			border-left: 2px solid #a2b78d;
-			color: var(--color-muted);
-			font-size: 0.8125rem;
+			font-size: 0.9375rem;
 			line-height: 1.6;
 		}
 	}
 
-	.status {
-		display: inline-flex;
-		align-items: center;
-		gap: 0.5rem;
-		margin-bottom: 1.75rem;
-		padding: 0.5rem 0.8rem;
-		border: 1px solid #d8e0cf;
-		border-radius: 2rem;
-		background: #eaf0e2;
-		font-size: 0.75rem;
+	.empty-mark {
+		display: inline-grid;
+		width: 3.5rem;
+		height: 3.5rem;
+		place-items: center;
+		border-radius: 1.125rem;
+		color: #6250d5;
+		background: #eeeafe;
+		font-size: 1.5rem;
 		font-weight: 600;
-		line-height: 1;
-
-		span {
-			width: 0.375rem;
-			height: 0.375rem;
-			border-radius: 50%;
-			background: var(--color-accent);
-		}
-	}
-
-	h1 {
-		font-size: clamp(2.75rem, 5.1vw, 4.6rem);
-		font-weight: 550;
-		letter-spacing: -0.06em;
-		line-height: 1.12;
-
-		em {
-			color: var(--color-accent);
-			font-family: Georgia, 'Times New Roman', serif;
-			font-weight: 400;
-			letter-spacing: -0.065em;
-		}
-	}
-
-	.growth-art {
-		width: 100%;
-		max-width: 29rem;
-		justify-self: center;
-
-		p {
-			margin-top: 0.5rem;
-			color: var(--color-muted);
-			font-family: Georgia, 'Times New Roman', serif;
-			font-size: 1.0625rem;
-			font-style: italic;
-			text-align: center;
-		}
-	}
-
-	.site-footer {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 1rem 2rem;
-		padding-block: 1.5rem 2rem;
-		border-top: 1px solid var(--color-line);
-		color: var(--color-muted);
-		font-size: 0.75rem;
-		line-height: 1.6;
-	}
-
-	.footer-note {
-		display: flex;
-		align-items: center;
-		gap: 0.5rem;
-
-		span {
-			font-size: 1rem;
-		}
-	}
-
-	@media (max-width: 900px) {
-		.hero {
-			grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr);
-			gap: 1rem;
-		}
-
-		h1 {
-			font-size: clamp(2.75rem, 5.5vw, 3.5rem);
-		}
-
-		.site-footer {
-			align-items: flex-start;
-			flex-direction: column;
-			gap: 0.5rem;
-		}
-	}
-
-	@media (max-width: 640px) {
-		.site-header {
-			padding-block: 1.5rem;
-		}
-
-		.header-note {
-			display: none;
-		}
-
-		main {
-			padding-block: 2.5rem 3rem;
-		}
-
-		.hero {
-			grid-template-columns: minmax(0, 1fr);
-			gap: 2.25rem;
-
-			&__content {
-				padding-bottom: 0;
-			}
-
-			&__description {
-				margin-top: 1.5rem;
-				font-size: 1rem;
-			}
-
-			&__footnote {
-				margin-top: 1.75rem;
-			}
-		}
-
-		h1 {
-			font-size: clamp(2.5rem, 8.5vw, 3.5rem);
-		}
-
-		.growth-art {
-			max-width: 19rem;
-		}
-
-		.site-footer {
-			padding-block: 1.25rem 1.5rem;
-		}
 	}
 </style>

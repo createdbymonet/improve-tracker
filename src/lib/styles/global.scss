@@ -1,18 +1,22 @@
 :root {
-	font-family: 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
-	color: #203b30;
-	background: #f6f7f2;
+	font-family: Inter, 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+	color: var(--color-ink);
+	background: var(--color-background);
 	font-synthesis: none;
 	text-rendering: optimizeLegibility;
 	-webkit-font-smoothing: antialiased;
 	-moz-osx-font-smoothing: grayscale;
 	color-scheme: light;
 
-	--color-background: #f6f7f2;
-	--color-ink: #203b30;
-	--color-muted: #59665b;
-	--color-accent: #35654d;
-	--color-line: #dce1d5;
+	--color-background: #f5f7ff;
+	--color-surface: #fff;
+	--color-ink: #172033;
+	--color-text: #344054;
+	--color-muted: #667085;
+	--color-accent: #6d5ce7;
+	--color-accent-hover: #5c4bd0;
+	--color-line: #e4e7ec;
+	--color-danger: #b42318;
 }
 
 *,
@@ -27,6 +31,7 @@ body {
 
 body,
 h1,
+h2,
 p {
 	margin: 0;
 }
@@ -41,7 +46,83 @@ svg {
 	max-width: 100%;
 }
 
+button,
+input,
+textarea {
+	font: inherit;
+}
+
+button {
+	touch-action: manipulation;
+}
+
+:focus-visible {
+	outline: 3px solid var(--color-accent);
+	outline-offset: 3px;
+}
+
+.button {
+	display: inline-flex;
+	min-width: 0;
+	min-height: 2.75rem;
+	align-items: center;
+	justify-content: center;
+	gap: 0.5rem;
+	padding: 0.75rem 1.125rem;
+	border: 1px solid transparent;
+	border-radius: 1rem;
+	font-size: 0.9375rem;
+	font-weight: 600;
+	line-height: 1.4;
+	text-align: center;
+	cursor: pointer;
+	transition: background-color 120ms ease;
+
+	&--primary {
+		color: #fff;
+		background: var(--color-accent);
+
+		&:hover:not(:disabled) {
+			background: var(--color-accent-hover);
+		}
+	}
+
+	&--secondary {
+		border-color: var(--color-line);
+		color: var(--color-text);
+		background: var(--color-surface);
+
+		&:hover {
+			background: var(--color-background);
+		}
+	}
+
+	&:disabled {
+		opacity: 0.65;
+		cursor: wait;
+	}
+}
+
+.sr-only {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	overflow: hidden;
+	clip-path: inset(50%);
+	white-space: nowrap;
+}
+
 ::selection {
 	color: var(--color-background);
 	background: var(--color-accent);
+}
+
+@media (prefers-reduced-motion: reduce) {
+	*,
+	*::before,
+	*::after {
+		animation: none !important;
+		transition: none !important;
+		scroll-behavior: auto !important;
+	}
 }

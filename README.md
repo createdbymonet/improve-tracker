@@ -1,14 +1,32 @@
 # Improve Tracker
 
-A study habit tracker focused on English learning, consistent routines, and daily improvement.
+A personal English-learning notebook for collecting vocabulary, examples, Japanese meanings, and notes.
 
-**Status: Coming Soon / Early Development**
+**Status: Early Functional MVP**
 
-The current project provides a responsive Coming Soon page and the frontend foundation. Tracking features, authentication, backend services, and data persistence are not implemented yet.
+Build your English, one word at a time. Vocabulary cards form a single, vertically scrolling notebook, with a narrow reading column on desktop and a mobile-friendly layout.
+
+## Current functionality
+
+- Add words through an inline form; new cards appear at the bottom of the notebook.
+- Keep five fields on each card: Word, Example sentence, Meaning, Translation, and Notes.
+- Require Word and Meaning; the other fields are optional. Whitespace is trimmed before saving.
+- Edit all five fields using the same form. Cancel discards unsaved input and preserves the original card.
+- Delete cards immediately. Card numbers follow the current list order.
+- Show an empty state after all words have been removed.
+- Start with three sample words: Versatile, Colleague, and Improve.
+
+## Persistence and architecture
+
+This MVP is frontend-only. Svelte 5 page state holds the notebook, and client-side `localStorage` keeps additions, edits, and deletions across refreshes. Stored data is loaded after the component mounts, so browser APIs are not accessed during SvelteKit server rendering.
+
+The stored vocabulary is validated before use. A missing or malformed saved notebook falls back to the sample words; a saved empty list stays empty.
+
+Data belongs to the current browser and site origin. Clearing site data removes the notebook, and it is not shared between browsers or devices. There is no backend, authentication, database, cloud synchronization, or external API integration.
 
 ## Tech stack
 
-- SvelteKit and Svelte
+- SvelteKit 3 and Svelte 5
 - TypeScript with strict type checking
 - SCSS for shared and component styles
 - Vite for development and production builds
@@ -38,6 +56,12 @@ Open the local URL printed by Vite, normally `http://localhost:5173`.
 
 Run `pnpm build` before `pnpm preview`.
 
+Run the vocabulary data and stored-JSON regression tests with Node's built-in test runner:
+
+```sh
+node --test tests/vocabulary.test.mjs
+```
+
 ## Project structure
 
 ```text
@@ -46,24 +70,35 @@ src/
 ├── lib/
 │   ├── assets/
 │   │   └── favicon.svg
+│   ├── components/
+│   │   ├── VocabularyCard.svelte
+│   │   └── VocabularyForm.svelte
+│   ├── data/
+│   │   └── vocabulary.ts
+│   ├── types/
+│   │   └── vocabulary.ts
 │   └── styles/
 │       └── global.scss
 └── routes/
     ├── +layout.svelte
     └── +page.svelte
+
+tests/
+└── vocabulary.test.mjs
 ```
 
-`+layout.svelte` loads the shared SCSS baseline. Page-specific styles live in scoped `<style lang="scss">` blocks. Add reusable components under `src/lib` when the application needs them.
+`+layout.svelte` loads the shared SCSS baseline. Page and component styles use scoped `<style lang="scss">` blocks. `+page.svelte` owns notebook state and browser storage access; the form and card components handle their respective interfaces. The data module contains sample vocabulary, whitespace normalization, and stored-JSON validation, while the type module defines the vocabulary model.
 
-## Planned features
+## Future ideas
 
-These features are planned for future development:
+These ideas are not part of the current MVP:
 
-- Daily study tasks and checkbox-based completion tracking
-- Study habits and streaks
-- Weekly and monthly progress and statistics
-- Study history
-- English learning categories: Listening, Speaking, Reading, Writing, and Vocabulary
+- Search and filtering
+- Study streaks
+- Quizzes
+- Categories
+- Spaced repetition
+- Progress tracking
 
 ## License
 
