@@ -1,4 +1,3 @@
-
 # Improve Tracker
 
 A personal English notebook with **Flashcards** and **Conversations**, built with SvelteKit 3, Svelte 5, TypeScript, SCSS, Cloudflare Workers, and D1.
