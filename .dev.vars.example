@@ -1,0 +1,3 @@
+# Copy to .dev.vars and set the hash from .owner-setup/owner-key-hash.txt.
+# Never put the plaintext owner access key in this file.
+OWNER_KEY_HASH=

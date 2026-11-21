@@ -41,15 +41,20 @@ jobs:
         run: pnpm check
 
       - name: Test vocabulary data
-        run: node --test tests/vocabulary.test.mjs
+        run: pnpm test
 
       - name: Build production application
         run: pnpm build
+
+      - name: Validate production binding configuration
+        run: node scripts/check-deployment.mjs
 
       - name: Validate Worker bundle without deploying
         run: pnpm deploy:dry-run
 
       - name: Deploy production Worker
+        # Wrangler inherits secrets from the latest uploaded version, including an undeployed one.
+        # secrets.required makes a missing OWNER_KEY_HASH fail before production traffic changes.
         run: pnpm deploy:production
         env:
           CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

@@ -6,6 +6,18 @@
 	"compatibility_flags": ["nodejs_compat"],
 	"workers_dev": true,
 	"preview_urls": false,
+	"secrets": {
+		"required": ["OWNER_KEY_HASH"]
+	},
+	"d1_databases": [
+		{
+			"binding": "DB",
+			"database_name": "improve-tracker-db",
+			"database_id": "bb57bd45-0e46-4249-8b3f-c23be904bc6a",
+			"migrations_dir": "migrations",
+			"remote": false
+		}
+	],
 	"assets": {
 		"binding": "ASSETS",
 		"directory": ".svelte-kit/cloudflare"

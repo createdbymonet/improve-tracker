@@ -1,105 +1,93 @@
 <script lang="ts">
-	import { onMount, tick } from 'svelte';
-	import VocabularyCard from '../lib/components/VocabularyCard.svelte';
-	import VocabularyForm from '../lib/components/VocabularyForm.svelte';
-	import {
-		createSampleVocabulary,
-		parseStoredVocabulary,
-		STORAGE_KEY
-	} from '../lib/data/vocabulary';
-	import type { VocabularyDraft, VocabularyItem } from '../lib/types/vocabulary';
+	import { invalidate } from '$app/navigation';
+	import { onMount } from 'svelte';
+	import type { PageProps } from './$types';
+	import Flashcards from '../lib/components/Flashcards.svelte';
+	import Conversations from '../lib/components/Conversations.svelte';
+	import { mutate } from '../lib/client/api';
+	import type { NotebookSnapshot } from '../lib/types/notebook';
 
-	interface Editor {
-		id: string | null;
-		values?: VocabularyDraft;
-	}
-
-	let vocabulary = $state<VocabularyItem[]>([]);
-	let ready = $state(false);
-	let editor = $state<Editor | null>(null);
-	let storageNotice = $state('');
-	let announcement = $state('');
-	let addWordButton: HTMLButtonElement;
-	let returnFocusTo: HTMLButtonElement | undefined;
-
+	let { data }: PageProps = $props();
+	let view = $state<'flashcards' | 'conversations'>('flashcards');
+	let current = $state<NotebookSnapshot | null>(null);
+	let snapshot = $derived(current ?? data.snapshot);
+	let flashcards: Flashcards | undefined = $state();
+	let conversations: Conversations | undefined = $state();
+	let busy = $state(false);
+	let notice = $state('');
 	onMount(() => {
-		try {
-			vocabulary = parseStoredVocabulary(window.localStorage.getItem(STORAGE_KEY));
-		} catch {
-			vocabulary = createSampleVocabulary();
-			storageNotice =
-				'We couldn’t open your saved notebook. Starter words are shown. Browser saving may be unavailable.';
+		let lastCheck = Date.now();
+		async function activity() {
+			if (
+				!data.isOwner ||
+				document.visibilityState !== 'visible' ||
+				Date.now() - lastCheck < 300000
+			)
+				return;
+			lastCheck = Date.now();
+			try {
+				const response = await fetch('/api/auth/session', { cache: 'no-store' });
+				const state: unknown = await response.json();
+				if (
+					response.ok &&
+					state &&
+					typeof state === 'object' &&
+					'isOwner' in state &&
+					state.isOwner === false
+				)
+					notice = 'Your session expired. Open Renew sign-in in a new tab, then retry saving.';
+			} catch {
+				/* A later action will report a connection error without discarding input. */
+			}
 		}
-		ready = true;
+		window.addEventListener('pointerdown', activity, { passive: true });
+		window.addEventListener('keydown', activity);
+		window.addEventListener('focus', activity);
+		return () => {
+			window.removeEventListener('pointerdown', activity);
+			window.removeEventListener('keydown', activity);
+			window.removeEventListener('focus', activity);
+		};
 	});
 
-	function persist(next: VocabularyItem[]) {
-		vocabulary = next;
-		try {
-			window.localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-			storageNotice = '';
-		} catch {
-			storageNotice =
-				'Your changes are kept in this tab, but couldn’t be saved. They may be lost when you refresh.';
-		}
+	async function refresh() {
+		const response = await fetch('/api/data', { cache: 'no-store' });
+		if (!response.ok)
+			throw new Error('Unable to refresh the notebook. Check your connection and try again.');
+		current = await response.json();
 	}
-
-	function openAdd(trigger: HTMLButtonElement) {
-		if (editor?.id === null) {
-			document.getElementById('vocabulary-word')?.focus();
-			return;
-		}
-		returnFocusTo = trigger;
-		editor = { id: null };
-	}
-
-	function openEdit(item: VocabularyItem, trigger: HTMLButtonElement) {
-		const { id, ...values } = item;
-		returnFocusTo = trigger;
-		editor = { id, values };
-	}
-
-	async function closeEditor() {
-		editor = null;
-		await tick();
-		if (returnFocusTo?.isConnected) returnFocusTo.focus();
-		else addWordButton.focus();
-		returnFocusTo = undefined;
-	}
-
-	async function saveWord(values: VocabularyDraft) {
-		if (!editor) return;
-		const editingId = editor.id;
-		const item: VocabularyItem = {
-			id: editingId ?? crypto.randomUUID(),
-			...values
-		};
-
-		persist(
-			editingId
-				? vocabulary.map((existing) => (existing.id === editingId ? item : existing))
-				: [...vocabulary, item]
+	function mayLeave() {
+		return (
+			(flashcards?.confirmNavigation() ?? true) && (conversations?.confirmNavigation() ?? true)
 		);
-		editor = null;
-		returnFocusTo = undefined;
-		announcement = (editingId ? 'Updated ' : 'Added ') + item.word + '.';
-		await tick();
-		document.getElementById('word-' + item.id)?.focus();
 	}
-
-	async function deleteWord(item: VocabularyItem) {
-		const index = vocabulary.findIndex((existing) => existing.id === item.id);
-		const next = vocabulary.filter((existing) => existing.id !== item.id);
-		const nextFocus = next[index] ?? next[index - 1];
-		if (editor?.id === item.id) {
-			editor = null;
-			returnFocusTo = undefined;
+	async function manualRefresh() {
+		if (!mayLeave()) return;
+		busy = true;
+		notice = '';
+		try {
+			await refresh();
+			flashcards?.discardDraft();
+			conversations?.discardDraft();
+			await invalidate('notebook:data');
+			notice = 'Notebook refreshed.';
+		} catch (error) {
+			notice = error instanceof Error ? error.message : 'Unable to refresh.';
+		} finally {
+			busy = false;
 		}
-		persist(next);
-		announcement = 'Deleted ' + item.word + '.';
-		await tick();
-		if (nextFocus) document.getElementById('word-' + nextFocus.id)?.focus();
-		else addWordButton.focus();
+	}
+	async function logout() {
+		if (!mayLeave()) return;
+		busy = true;
+		notice = '';
+		try {
+			await mutate('/api/auth/logout', 'POST', {});
+			window.location.assign('/');
+		} catch (error) {
+			notice = error instanceof Error ? error.message : 'Unable to sign out.';
+			busy = false;
+		}
 	}
 </script>
 
@@ -107,199 +95,155 @@
 	<title>Improve Tracker — Your English Notebook</title>
 	<meta
 		name="description"
-		content="Build your English, one word at a time. Keep vocabulary, examples, Japanese meanings, translations, and notes in your own English notebook."
+		content="A personal English notebook with organized flashcards and conversation practice. Explore the owner's real notebook in read-only demo mode."
 	/>
 </svelte:head>
 
 <div class="notebook">
+	<a class="skip-link" href="#learning-content">Skip to notebook</a>
 	<header class="notebook-header">
 		<p class="eyebrow">Daily English Notebook</p>
 		<h1>Improve Tracker</h1>
-		<p class="subtitle">Build your English, one word at a time.</p>
+		<p class="subtitle">Build your English, one word and conversation at a time.</p>
+		<div class="mode-row">
+			<span class="mode-badge">{data.isOwner ? 'Owner mode' : 'Read-only demo'}</span>
+			{#if data.isOwner}
+				<button class="text-button" disabled={busy} onclick={logout}>Sign out</button>
+				<a href="/login" target="_blank" rel="noopener">Renew sign-in</a>
+			{:else if data.authConfigured}
+				<a href="/login">Owner sign-in</a>
+			{/if}
+		</div>
+		<p class="mode-help">
+			{data.isOwner
+				? 'Your changes are saved to your cloud notebook.'
+				: 'Explore the owner’s real flashcards and conversations. This demo is view only.'}
+		</p>
 	</header>
-
-	<div class="add-word-action">
+	<nav class="learning-nav" aria-label="Learning areas">
 		<button
-			bind:this={addWordButton}
-			class="button button--primary add-word-button"
 			type="button"
-			disabled={!ready}
-			aria-expanded={editor !== null}
-			aria-controls={editor ? 'vocabulary-editor' : undefined}
-			onclick={(event) => openAdd(event.currentTarget)}
+			aria-current={view === 'flashcards' ? 'page' : undefined}
+			onclick={() => (view = 'flashcards')}>Flashcards</button
 		>
-			<span class="plus" aria-hidden="true">+</span> Add Word
-		</button>
-		{#if storageNotice}
-			<p class="storage-notice" role="status">{storageNotice}</p>
-		{/if}
-	</div>
-
-	<main class="notebook-content" aria-busy={!ready} aria-label="Vocabulary notebook">
-		{#if editor}
-			{#key editor}
-				<div id="vocabulary-editor" class="editor">
-					<VocabularyForm
-						initialValues={editor.values}
-						editing={editor.id !== null}
-						onSave={saveWord}
-						onCancel={closeEditor}
-					/>
-				</div>
-			{/key}
-		{/if}
-
-		{#if !ready}
-			<p class="loading" role="status">Opening your notebook…</p>
-		{:else if vocabulary.length === 0}
-			<section class="empty-state" aria-labelledby="empty-title">
-				<div class="empty-mark" aria-hidden="true">Aa</div>
-				<h2 id="empty-title">Your next word starts here.</h2>
-				<p>Add a word, write what it means, and make it yours.</p>
-				<button
-					class="button button--primary"
-					type="button"
-					onclick={(event) => openAdd(event.currentTarget)}
-				>
-					<span aria-hidden="true">+</span> Add your first word
-				</button>
+		<button
+			type="button"
+			aria-current={view === 'conversations' ? 'page' : undefined}
+			onclick={() => (view = 'conversations')}>Conversations</button
+		>
+	</nav>
+	<main id="learning-content" tabindex="-1" class="notebook-content" aria-busy={busy}>
+		<div class="refresh-row">
+			<button class="text-button" disabled={busy} onclick={manualRefresh}
+				>{busy ? 'Please wait…' : 'Refresh notebook'}</button
+			>
+		</div>
+		<p role="status" class="notice">{notice}</p>
+		{#if snapshot}
+			<section hidden={view !== 'flashcards'} inert={busy} aria-label="Flashcards">
+				<Flashcards bind:this={flashcards} {snapshot} canEdit={data.isOwner} onRefresh={refresh} />
+			</section>
+			<section hidden={view !== 'conversations'} inert={busy} aria-label="Conversations">
+				<Conversations
+					bind:this={conversations}
+					{snapshot}
+					canEdit={data.isOwner}
+					onRefresh={refresh}
+				/>
 			</section>
 		{:else}
-			<ol class="vocabulary-list" aria-label="Saved words">
-				{#each vocabulary as item, index (item.id)}
-					<li>
-						<VocabularyCard {item} {index} onEdit={openEdit} onDelete={deleteWord} />
-					</li>
-				{/each}
-			</ol>
+			<div class="empty-state" role="alert">
+				<h2>Notebook unavailable</h2>
+				<p>{data.loadError}</p>
+				<p>The notebook will appear here when the cloud connection is ready.</p>
+			</div>
 		{/if}
 	</main>
-
-	<p class="sr-only" role="status">{announcement}</p>
 </div>
 
 <style lang="scss">
 	.notebook {
 		width: 100%;
-		max-width: 45rem;
+		max-width: 60rem;
 		margin-inline: auto;
 		padding-bottom: env(safe-area-inset-bottom, 0px);
 	}
-
 	.notebook-header {
-		padding: 2.75rem 1.5rem 1.125rem;
-
-		h1 {
-			margin-top: 0.375rem;
-			font-size: 1.875rem;
-			font-weight: 700;
-			letter-spacing: -0.035em;
-			line-height: 1.2;
-			overflow-wrap: anywhere;
-		}
+		padding: 2.75rem 1.5rem 1.25rem;
 	}
-
+	h1 {
+		margin-top: 0.375rem;
+		font-size: clamp(1.875rem, 5vw, 2.25rem);
+		letter-spacing: -0.035em;
+	}
 	.eyebrow {
 		color: #6250d5;
 		font-size: 0.75rem;
 		font-weight: 600;
-		line-height: 1.25;
 		text-transform: uppercase;
 	}
-
-	.subtitle {
-		margin-top: 0.375rem;
+	.subtitle,
+	.mode-help {
+		margin-top: 0.5rem;
 		color: var(--color-muted);
-		font-size: 0.9375rem;
-		line-height: 1.2;
-	}
-
-	.add-word-action {
-		padding: 0.25rem 1.5rem 1.125rem;
-		background: var(--color-surface);
-	}
-
-	.add-word-button {
-		width: 100%;
-		min-height: 3.125rem;
-		justify-content: flex-start;
-	}
-
-	.plus {
-		font-size: 1.25rem;
-		font-weight: 700;
-		line-height: 1;
-	}
-
-	.storage-notice {
-		margin-top: 0.875rem;
-		color: var(--color-muted);
-		font-size: 0.8125rem;
 		line-height: 1.6;
-		overflow-wrap: anywhere;
 	}
-
-	.notebook-content {
-		min-width: 0;
-		padding: 0 1.5rem 2.5rem;
+	.mode-help {
+		font-size: 0.8125rem;
 	}
-
-	.editor {
-		margin-bottom: 1rem;
-		scroll-margin-block: 1rem;
-	}
-
-	.vocabulary-list {
+	.mode-row {
 		display: flex;
-		flex-direction: column;
-		gap: 1rem;
-		margin: 0;
-		padding: 0;
-		list-style: none;
-
-		li {
-			min-width: 0;
-		}
+		align-items: center;
+		flex-wrap: wrap;
+		gap: 0.75rem;
+		margin-top: 1rem;
+		font-size: 0.8125rem;
 	}
-
-	.loading {
-		padding-block: 2.5rem;
-		color: var(--color-muted);
-		font-size: 0.875rem;
-		text-align: center;
-	}
-
-	.empty-state {
-		padding: 2.5rem 1.5rem;
-		border: 1px dashed #c9c1f5;
-		border-radius: 1.375rem;
-		background: var(--color-surface);
-		text-align: center;
-
-		h2 {
-			margin-block: 1rem 0.625rem;
-			font-size: 1.375rem;
-			letter-spacing: -0.025em;
-			line-height: 1.3;
-		}
-
-		p {
-			margin-bottom: 1.5rem;
-			color: var(--color-muted);
-			font-size: 0.9375rem;
-			line-height: 1.6;
-		}
-	}
-
-	.empty-mark {
-		display: inline-grid;
-		width: 3.5rem;
-		height: 3.5rem;
-		place-items: center;
-		border-radius: 1.125rem;
-		color: #6250d5;
+	.mode-badge {
 		background: #eeeafe;
-		font-size: 1.5rem;
+		color: #6250d5;
+		padding: 0.4rem 0.7rem;
+		border-radius: 1rem;
 		font-weight: 600;
+	}
+	.learning-nav {
+		display: flex;
+		gap: 0.5rem;
+		margin: 0 1.5rem 1rem;
+		padding: 0.375rem;
+		border-radius: 1.125rem;
+		background: #eae6fb;
+	}
+	.learning-nav button {
+		appearance: none;
+		-webkit-tap-highlight-color: transparent;
+		flex: 1;
+		min-height: 2.75rem;
+		border: 0;
+		border-radius: 0.875rem;
+		color: var(--color-muted);
+		background: transparent;
+		cursor: pointer;
+		font-weight: 600;
+
+		&:focus:not(:focus-visible) {
+			outline: none;
+		}
+	}
+	.learning-nav button[aria-current='page'] {
+		background: var(--color-surface);
+		color: #6250d5;
+		box-shadow: 0 2px 6px #17203312;
+	}
+	.notebook-content {
+		padding: 0 1.5rem 2.5rem;
+		min-width: 0;
+	}
+	.refresh-row {
+		display: flex;
+		justify-content: flex-end;
+	}
+	.notice:empty {
+		display: none;
 	}
 </style>
