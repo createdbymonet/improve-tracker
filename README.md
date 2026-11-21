@@ -1,6 +1,9 @@
+
 # Improve Tracker
 
 A personal English notebook with **Flashcards** and **Conversations**, built with SvelteKit 3, Svelte 5, TypeScript, SCSS, Cloudflare Workers, and D1.
+
+**[Live Demo](https://improve-tracker.sumihana.workers.dev/)**
 
 Public visitors explore the owner's real cloud notebook in a read-only demo. Only the owner can sign in and edit. Conversation messages are written by the owner for both Me and Partner; there is no AI chat service.
 
@@ -36,6 +39,8 @@ To enable owner sign-in locally:
 4. Restart Vite and sign in at `/login` using the plaintext key from your password manager.
 
 Use separate generated keys for local and production environments. The key generator refuses to overwrite existing files. Move an old setup directory to a protected location before deliberately generating another key. On Windows, protect these files with your user account's file permissions; POSIX `mode` does not establish a Windows ACL.
+
+## Checks
 
 ```sh
 pnpm types
