@@ -4,11 +4,13 @@
 	interface Props {
 		item: VocabularyItem;
 		index: number;
-		onEdit: (item: VocabularyItem, trigger: HTMLButtonElement) => void;
-		onDelete: (item: VocabularyItem) => void;
+		editable?: boolean;
+		busy?: boolean;
+		onEdit?: (item: VocabularyItem, trigger: HTMLButtonElement) => void;
+		onDelete?: (item: VocabularyItem) => void;
 	}
 
-	let { item, index, onEdit, onDelete }: Props = $props();
+	let { item, index, editable = true, busy = false, onEdit, onDelete }: Props = $props();
 </script>
 
 <article
@@ -49,24 +51,32 @@
 		</div>
 	</dl>
 
-	<footer class="card-actions">
-		<button
-			type="button"
-			class="edit-button"
-			aria-label={'Edit ' + item.word}
-			onclick={(event) => onEdit(item, event.currentTarget)}
-		>
-			Edit
-		</button>
-		<button
-			type="button"
-			class="delete-button"
-			aria-label={'Delete ' + item.word}
-			onclick={() => onDelete(item)}
-		>
-			Delete
-		</button>
-	</footer>
+	{#if editable && (onEdit || onDelete)}
+		<footer class="card-actions">
+			{#if onEdit}
+				<button
+					type="button"
+					class="edit-button"
+					aria-label={'Edit ' + item.word}
+					disabled={busy}
+					onclick={(event) => onEdit(item, event.currentTarget)}
+				>
+					Edit
+				</button>
+			{/if}
+			{#if onDelete}
+				<button
+					type="button"
+					class="delete-button"
+					aria-label={'Delete ' + item.word}
+					disabled={busy}
+					onclick={() => onDelete(item)}
+				>
+					Delete
+				</button>
+			{/if}
+		</footer>
+	{/if}
 </article>
 
 <style lang="scss">
